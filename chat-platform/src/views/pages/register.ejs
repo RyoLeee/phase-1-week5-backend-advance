@@ -1,0 +1,87 @@
+<%- include('../partials/header.ejs', { title: 'Register - ChatPlatform' }) %>
+
+<div class="auth-container">
+  <div class="auth-card">
+    <div class="auth-header">
+      <span class="auth-icon">🚀</span>
+      <h2>Create Account</h2>
+      <p>Join and start chatting!</p>
+    </div>
+
+    <div id="alertBox" class="alert hidden"></div>
+
+    <form id="registerForm" class="auth-form">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" placeholder="Choose a username" required minlength="3" maxlength="20">
+      </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="Your email address" required>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Create a password" required minlength="6">
+      </div>
+      <div class="form-group">
+        <label for="confirmPassword">Confirm Password</label>
+        <input type="password" id="confirmPassword" placeholder="Confirm password" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" id="registerBtn">
+        Create Account
+      </button>
+    </form>
+
+    <div class="auth-footer">
+      <p>Already have an account? <a href="/login">Sign in</a></p>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('registerBtn');
+
+  const username = document.getElementById('username').value;
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  const confirmPassword = document.getElementById('confirmPassword').value;
+
+  if (password !== confirmPassword) {
+    return showAlert('Passwords do not match', 'error');
+  }
+
+  btn.textContent = 'Creating account...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email, password })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      showAlert('Account created! Redirecting to login...', 'success');
+      setTimeout(() => window.location.href = '/login', 1500);
+    } else {
+      showAlert(data.error, 'error');
+    }
+  } catch {
+    showAlert('Connection error', 'error');
+  } finally {
+    btn.textContent = 'Create Account';
+    btn.disabled = false;
+  }
+});
+
+function showAlert(msg, type) {
+  const box = document.getElementById('alertBox');
+  box.textContent = msg;
+  box.className = `alert alert-${type}`;
+}
+</script>
+
+<%- include('../partials/footer.ejs') %>

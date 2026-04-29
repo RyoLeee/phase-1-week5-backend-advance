@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof title !== 'undefined' ? title : 'ChatPlatform' %></title>
+  <link rel="stylesheet" href="/public/css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="logo">💬</span>
+      <a href="/" class="brand-text">ChatPlatform</a>
+    </div>
+    <div class="nav-links" id="navLinks">
+      <a href="/dashboard">Rooms</a>
+      <span id="navUser" class="nav-user hidden"></span>
+      <a href="/login" id="navLogin" class="btn btn-outline">Login</a>
+      <button id="navLogout" class="btn btn-outline hidden" onclick="logout()">Logout</button>
+    </div>
+  </nav>
+  <main class="main-content">

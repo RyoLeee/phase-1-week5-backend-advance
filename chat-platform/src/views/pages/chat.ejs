@@ -1,0 +1,355 @@
+<%- include('../partials/header.ejs', { title: room.name + ' - ChatPlatform' }) %>
+
+<div class="chat-layout">
+  <!-- Sidebar -->
+  <aside class="chat-sidebar">
+    <div class="sidebar-header">
+      <h3>🏠 <%= room.name %></h3>
+      <p class="sidebar-desc"><%= room.description || '' %></p>
+    </div>
+
+    <div class="sidebar-section">
+      <h4>Members Online</h4>
+      <ul id="membersList" class="members-list">
+        <li class="loading-text">Loading...</li>
+      </ul>
+    </div>
+
+    <div class="sidebar-actions">
+      <a href="/dashboard" class="btn btn-outline btn-full">← Back to Rooms</a>
+      <% if (room.ownerId) { %>
+        <button id="deleteRoomBtn" class="btn btn-danger btn-full hidden" 
+          onclick="confirmDeleteRoom('<%= room.id %>', '<%= room.name %>')">
+          🗑️ Delete Room
+        </button>
+      <% } %>
+    </div>
+  </aside>
+
+  <!-- Main chat area -->
+  <div class="chat-main">
+    <div class="chat-header">
+      <h2># <%= room.name %></h2>
+      <div class="chat-status">
+        <span id="wsStatus" class="status-dot disconnected"></span>
+        <span id="wsStatusText">Connecting...</span>
+      </div>
+    </div>
+
+    <!-- Login prompt for guests -->
+    <div id="guestBanner" class="guest-banner hidden">
+      <p>You need to <a href="/login">login</a> to send messages.</p>
+    </div>
+
+    <!-- Messages area -->
+    <div id="messagesContainer" class="messages-container">
+      <div class="messages-loading">Connecting to room...</div>
+    </div>
+
+    <!-- Message input -->
+    <div class="chat-input-area">
+      <div id="editingBanner" class="editing-banner hidden">
+        <span>✏️ Editing message</span>
+        <button onclick="cancelEdit()" class="cancel-edit">✕</button>
+      </div>
+      <div class="input-row">
+        <input type="text" id="messageInput" placeholder="Type a message..." 
+          maxlength="2000" autocomplete="off" disabled>
+        <button id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ROOM_ID = '<%= room.id %>';
+const ROOM_OWNER_ID = '<%= room.ownerId %>';
+const token = localStorage.getItem('token');
+const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+
+let ws = null;
+let editingMessageId = null;
+let reconnectTimeout = null;
+
+// Initialize
+if (!currentUser || !token) {
+  document.getElementById('guestBanner').classList.remove('hidden');
+}
+
+// Show delete button for owner
+if (currentUser && currentUser.id === ROOM_OWNER_ID) {
+  document.getElementById('deleteRoomBtn').classList.remove('hidden');
+}
+
+// WebSocket Connection
+function connectWS() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    setStatus('connected', 'Connected');
+
+    // Authenticate
+    if (token) {
+      ws.send(JSON.stringify({ type: 'auth', payload: { token } }));
+    }
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      handleWsEvent(msg);
+    } catch (e) {
+      console.error('Parse error:', e);
+    }
+  };
+
+  ws.onclose = () => {
+    setStatus('disconnected', 'Disconnected');
+    document.getElementById('messageInput').disabled = true;
+    document.getElementById('sendBtn').disabled = true;
+
+    // Auto reconnect after 3s
+    reconnectTimeout = setTimeout(connectWS, 3000);
+  };
+
+  ws.onerror = (e) => {
+    console.error('WS error:', e);
+    setStatus('error', 'Connection error');
+  };
+}
+
+function handleWsEvent(event) {
+  switch (event.type) {
+    case 'connected':
+      console.log('WS connected:', event.payload.message);
+      break;
+
+    case 'auth_success':
+      // Join room after auth
+      ws.send(JSON.stringify({ type: 'join_room', payload: { roomId: ROOM_ID } }));
+      break;
+
+    case 'room_joined':
+      renderMessages(event.payload.messages);
+      renderMembers(event.payload.members);
+      if (currentUser) {
+        document.getElementById('messageInput').disabled = false;
+        document.getElementById('sendBtn').disabled = false;
+      }
+      break;
+
+    case 'new_message':
+      appendMessage(event.payload.message);
+      break;
+
+    case 'message_edited':
+      updateMessageInDOM(event.payload.message);
+      break;
+
+    case 'message_deleted':
+      removeMessageFromDOM(event.payload.messageId);
+      break;
+
+    case 'user_joined':
+      addSystemMessage(`${event.payload.username} joined the room`);
+      break;
+
+    case 'user_left':
+      addSystemMessage(`${event.payload.username} left the room`);
+      break;
+
+    case 'error':
+      console.error('WS error:', event.payload.message);
+      break;
+  }
+}
+
+// Render messages
+function renderMessages(messages) {
+  const container = document.getElementById('messagesContainer');
+  container.innerHTML = '';
+
+  if (!messages.length) {
+    container.innerHTML = '<div class="empty-messages">No messages yet. Say hello! 👋</div>';
+    return;
+  }
+
+  messages.forEach(msg => appendMessage(msg, false));
+  container.scrollTop = container.scrollHeight;
+}
+
+function appendMessage(msg, scroll = true) {
+  const container = document.getElementById('messagesContainer');
+  const emptyEl = container.querySelector('.empty-messages');
+  if (emptyEl) emptyEl.remove();
+
+  const isOwn = currentUser && msg.userId === currentUser.id;
+  const isDeleted = !!msg.deletedAt;
+
+  const el = document.createElement('div');
+  el.className = `message ${isOwn ? 'own-message' : 'other-message'} ${isDeleted ? 'deleted-message' : ''}`;
+  el.id = `msg-${msg.id}`;
+  el.dataset.userId = msg.userId;
+
+  const time = new Date(msg.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+  el.innerHTML = `
+    <div class="message-header">
+      <span class="message-user ${isOwn ? 'own' : ''}">${escapeHtml(msg.username || 'Unknown')}</span>
+      <span class="message-time">${time}${msg.isEdited && !isDeleted ? ' <em>(edited)</em>' : ''}</span>
+      ${isOwn && !isDeleted ? `
+        <div class="message-actions">
+          <button class="msg-action-btn" onclick="startEdit('${msg.id}', \`${escapeForAttr(msg.content)}\`)">✏️</button>
+          <button class="msg-action-btn danger" onclick="deleteMessage('${msg.id}')">🗑️</button>
+        </div>
+      ` : ''}
+    </div>
+    <div class="message-content">${escapeHtml(msg.content)}</div>
+  `;
+
+  container.appendChild(el);
+  if (scroll) container.scrollTop = container.scrollHeight;
+}
+
+function updateMessageInDOM(msg) {
+  const el = document.getElementById(`msg-${msg.id}`);
+  if (!el) return;
+  const contentEl = el.querySelector('.message-content');
+  const timeEl = el.querySelector('.message-time');
+  if (contentEl) contentEl.textContent = msg.content;
+  if (timeEl) {
+    const time = new Date(msg.updatedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    timeEl.innerHTML = `${time} <em>(edited)</em>`;
+  }
+}
+
+function removeMessageFromDOM(messageId) {
+  const el = document.getElementById(`msg-${messageId}`);
+  if (el) {
+    el.classList.add('deleted-message');
+    const content = el.querySelector('.message-content');
+    const actions = el.querySelector('.message-actions');
+    if (content) content.textContent = '[This message was deleted]';
+    if (actions) actions.remove();
+  }
+}
+
+function addSystemMessage(text) {
+  const container = document.getElementById('messagesContainer');
+  const el = document.createElement('div');
+  el.className = 'system-message';
+  el.textContent = text;
+  container.appendChild(el);
+  container.scrollTop = container.scrollHeight;
+}
+
+function renderMembers(members) {
+  const list = document.getElementById('membersList');
+  if (!members.length) {
+    list.innerHTML = '<li class="empty-text">No members</li>';
+    return;
+  }
+  list.innerHTML = members.map(m => `
+    <li class="member-item ${m.userId === currentUser?.id ? 'current-user' : ''}">
+      <span class="member-avatar">${m.username.charAt(0).toUpperCase()}</span>
+      <span class="member-name">${escapeHtml(m.username)}</span>
+      <span class="member-role">${m.role}</span>
+    </li>
+  `).join('');
+}
+
+// Send message
+function sendMessage() {
+  const input = document.getElementById('messageInput');
+  const content = input.value.trim();
+  if (!content || !ws) return;
+
+  if (editingMessageId) {
+    ws.send(JSON.stringify({
+      type: 'edit_message',
+      payload: { messageId: editingMessageId, content }
+    }));
+    cancelEdit();
+  } else {
+    ws.send(JSON.stringify({
+      type: 'send_message',
+      payload: { content }
+    }));
+  }
+
+  input.value = '';
+}
+
+// Edit message
+function startEdit(messageId, content) {
+  editingMessageId = messageId;
+  const input = document.getElementById('messageInput');
+  input.value = content;
+  input.focus();
+  document.getElementById('editingBanner').classList.remove('hidden');
+}
+
+function cancelEdit() {
+  editingMessageId = null;
+  document.getElementById('messageInput').value = '';
+  document.getElementById('editingBanner').classList.add('hidden');
+}
+
+// Delete message
+function deleteMessage(messageId) {
+  if (!confirm('Delete this message?')) return;
+  ws.send(JSON.stringify({
+    type: 'delete_message',
+    payload: { messageId }
+  }));
+}
+
+// Delete room
+async function confirmDeleteRoom(roomId, roomName) {
+  if (!confirm(`Delete room "${roomName}"? All messages will be lost!`)) return;
+
+  const res = await fetch(`/api/rooms/${roomId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    alert('Room deleted');
+    window.location.href = '/dashboard';
+  } else {
+    alert(data.error);
+  }
+}
+
+// Enter key to send
+document.getElementById('messageInput').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+function setStatus(state, text) {
+  document.getElementById('wsStatus').className = `status-dot ${state}`;
+  document.getElementById('wsStatusText').textContent = text;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+function escapeForAttr(str) {
+  return str.replace(/`/g, '\\`').replace(/\\/g, '\\\\');
+}
+
+// Start connecting
+connectWS();
+</script>
+
+<%- include('../partials/footer.ejs') %>

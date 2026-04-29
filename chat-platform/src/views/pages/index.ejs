@@ -1,0 +1,72 @@
+<%- include('../partials/header.ejs', { title: 'ChatPlatform - Home' }) %>
+
+<div class="hero">
+  <div class="hero-content">
+    <h1>Welcome to <span class="gradient-text">ChatPlatform</span></h1>
+    <p class="hero-sub">Real-time chat rooms powered by WebSocket. Create rooms, join conversations, and connect instantly.</p>
+    <div class="hero-actions">
+      <a href="/register" class="btn btn-primary">Get Started</a>
+      <a href="/dashboard" class="btn btn-outline">Browse Rooms</a>
+    </div>
+  </div>
+  <div class="hero-visual">
+    <div class="chat-preview">
+      <div class="preview-msg received">
+        <span class="preview-user">Alice</span>
+        <span class="preview-text">Hey everyone! 👋</span>
+      </div>
+      <div class="preview-msg sent">
+        <span class="preview-text">Welcome to the room!</span>
+      </div>
+      <div class="preview-msg received">
+        <span class="preview-user">Bob</span>
+        <span class="preview-text">This chat is super fast ⚡</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="features">
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <h3>Real-time WebSocket</h3>
+      <p>Instant message delivery with no page refresh</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🏠</div>
+      <h3>Custom Rooms</h3>
+      <p>Create and manage your own chat rooms</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">✏️</div>
+      <h3>Edit & Delete</h3>
+      <p>Full control over your messages</p>
+    </div>
+  </div>
+</section>
+
+<section class="public-rooms">
+  <h2>Public Rooms</h2>
+  <div class="room-grid">
+    <% if (rooms && rooms.length > 0) { %>
+      <% rooms.forEach(room => { %>
+        <div class="room-card">
+          <div class="room-icon">🏠</div>
+          <div class="room-info">
+            <h4><%= room.name %></h4>
+            <p class="room-desc"><%= room.description || 'No description' %></p>
+            <p class="room-owner">by <%= room.ownerUsername %></p>
+          </div>
+          <a href="/chat/<%= room.id %>" class="btn btn-primary btn-sm">Join</a>
+        </div>
+      <% }) %>
+    <% } else { %>
+      <div class="empty-state">
+        <p>No public rooms yet. <a href="/register">Sign up</a> to create one!</p>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<%- include('../partials/footer.ejs') %>
