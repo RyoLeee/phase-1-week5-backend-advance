@@ -7,7 +7,7 @@ Repository ini merupakan **jawaban / submission resmi** untuk tugas **Group Proj
 ## 🔗 Repository Utama
 Silakan akses project melalui link berikut:
 
-👉 https://github.com/Ethereum-Jakarta/phase-1-week5-backend-advance.git
+👉 https://github.com/RyoLeee/RPN-Central-Ads-System.git
 
 ## 📌 Deskripsi
 
